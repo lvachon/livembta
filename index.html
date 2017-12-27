@@ -1,0 +1,230 @@
+<html>
+	<head>
+		<title>MBTA LIVE MAP YO</title>
+		<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+		<script>
+			var lineColors = {"Red":"#AA0000",
+							  "Blue":"#0000A0",
+							  "Green-A":"#00A000",
+							  "Green-B":"#00A000",
+							  "Green-C":"#00A000",
+							  "Green-D":"#00A000",
+							  "Green-E":"#00A000",
+							  "Orange":"#FF8000",
+							  "CR-Lowell":"#A000A0",
+							  "CR-Haverhill":"#A000A0",
+							  "CR-Newburyport":"#A000A0",
+							  "CR-Rockport":"#A000A0",
+							  "CR-Wachusett":"#A000A0",
+							  "CR-Worcester":"#a00000"};
+			var vehicles = [];
+			var stops = [];
+			var E=-70,W=-72,N=43,S=42;
+			var canvas;
+			function Vehicle(params){
+				this.params = {pos:{x:0,y:0,h:0,v:0}};
+				this.params.pos.lat = params.pos.lat ? params.pos.lat : 0;
+				this.params.pos.lon = params.pos.lon ? params.pos.lon : 0;
+				this.params.pos.h = params.pos.h ? params.pos.h : 0;
+				this.params.pos.v = params.pos.v ? params.pos.v : 0;
+				this.params.line = params.line ? params.line : "RED";
+				this.params.number = params.number ? params.number : 0;
+				this.params.lead = params.lead ? params.lead : 0;
+				this.params.radius = params.radius ? params.radius : 10;
+				this.params.canvas = params.canvas;
+				if(typeof params.canvas == "undefined"){
+					alert("Canvas not found");
+				}
+
+				this.updateParams = function(info){
+					for(var i in info.data){
+						var v = info.data[i];
+						if(v.relationships.route.data.id == this.params.line && v.attributes.label == this.params.number){
+							this.params.pos.lat = v.attributes.latitude;
+							this.params.pos.lon = v.attributes.longitude;
+							this.params.pos.h = Math.PI * v.attributes.bearing/360;
+							this.params.pos.v = v.attributes.speed;
+							this.params.line = v.relationships.route.data.id;
+							this.params.number = v.attributes.label;
+						}
+					}
+				}
+
+				this.draw = function(){
+					
+					var ctx = this.params.canvas.getContext('2d');
+					ctx.fillStyle = lineColors[this.params.line];
+					ctx.strokeStyle = "#00000080";
+					var x = this.params.canvas.width*(this.params.pos.lon - W) / (E-W);
+					var y = this.params.canvas.height*(1-(this.params.pos.lat - S) / (N-S));
+					ctx.beginPath();
+					ctx.moveTo(x+Math.sin(this.params.pos.h)*this.params.radius,y-Math.cos(this.params.pos.h)*this.params.radius);//Tip
+					ctx.lineTo(x+Math.sin(this.params.pos.h-3*Math.PI/4)*this.params.radius,y-Math.cos(this.params.pos.h-3*Math.PI/4)*this.params.radius);//Leg
+					ctx.lineTo(x+Math.sin(this.params.pos.h+3*Math.PI/4)*this.params.radius,y-Math.cos(this.params.pos.h+3*Math.PI/4)*this.params.radius);//Leg
+					ctx.lineTo(x+Math.sin(this.params.pos.h)*this.params.radius,y-Math.cos(this.params.pos.h)*this.params.radius);//Tip
+					ctx.fill();
+					ctx.stroke();
+				}
+
+			}
+
+			function updateVehicleStatus(){
+				$("#status").html("Fetching");
+				$.get("https://api-v3.mbta.com/vehicles",function(data){
+					var info = data;
+    				$("#status").html("Parsing");
+					canvas.getContext('2d').fillStyle="#00000008";
+					canvas.getContext('2d').fillRect(0,0,canvas.width,canvas.height);
+					for(var i in vehicles){
+						vehicles[i].updateParams(info);
+						vehicles[i].draw();
+					}
+					$("#status").html("Done");
+				});
+			}
+
+			function initVehicleStatus(){
+				$.get("https://api-v3.mbta.com/vehicles",function(data){
+					var info=data;
+					for(var i in info.data){
+						var v = info.data[i];
+						if(typeof lineColors[v.relationships.route.data.id]!="undefined"){
+							var params = {pos:{}};
+							params.pos.lat = v.attributes.longitude;
+							params.pos.lon = v.attributes.latitude;
+							params.pos.h = Math.PI * v.attributes.bearing/360;
+							params.pos.v = v.attributes.speed;
+							params.line = v.relationships.route.data.id;
+							params.number = v.attributes.label;
+							params.canvas = canvas;
+							params.radius=5;
+							var veh = new Vehicle(params);
+							veh.draw();
+							vehicles.push(veh);
+
+						}
+					}
+				});
+			}
+
+			function mainLoop(){
+				drawStops();
+				updateVehicleStatus();
+				setTimeout('mainLoop()',5000);
+			}
+
+			function canvwheel(e){
+				console.log(e);
+				e.preventDefault();
+				var dlon = E-W;
+				var dlat = N-S;
+				if(e.deltaY>0){
+					d=1;
+				}else{
+					d=-1;
+				}
+				$("#status").html("Zooming");
+				N+=d*dlat*0.1;
+				S-=d*dlat*0.1;
+				E+=d*dlon*0.1;
+				W-=d*dlon*0.1;
+				$("#status").html("Drawing");
+				var ctx = canvas.getContext('2d');
+				ctx.fillStyle = "#000000";
+				ctx.fillRect(0,0,canvas.width,canvas.height);
+				drawStops();
+				for(var i in vehicles){
+					vehicles[i].draw();
+				}
+
+			}
+
+			function populateStops(index){
+				$.get("https://api-v3.mbta.com/stops?filter[route]="+Object.keys(lineColors)[index],function(data){
+					for(var i in data.data){
+						var stop = data.data[i];
+						stops.push({"line":Object.keys(lineColors)[index],"name":stop.attributes.name,"lat":stop.attributes.latitude,"lon":stop.attributes.longitude});
+					}
+					if(index<Object.keys(lineColors).length-1){setTimeout('populateStops('+(index+1)+')',100);}else{drawStops();}
+				});
+			}
+			function drawStops(){
+				var ctx = canvas.getContext('2d');
+				for(var i in stops){
+					var stop = stops[i];
+					var x = canvas.width*(stop.lon-W)/(E-W);
+					var y = canvas.height*(1-(stop.lat-S)/(N-S));
+					ctx.fillStyle=lineColors[stop.line];
+					ctx.strokeStyle="#FFFFFF80";
+					ctx.beginPath();
+					ctx.arc(x,y,3,0,Math.PI*2,true);
+					ctx.fill();
+					ctx.stroke();
+				}
+			}
+			var ox,oy,drag;
+			function tstart(e){
+				e.preventDefault();
+				if(e.changedTouches){
+					ox=e.changedTouches[0].offsetX;
+					oy=e.changedTouches[0].offsetY;
+				}else{
+					ox=e.offsetX;
+					oy=e.offsetY;
+				}
+				drag=true;
+			}
+			function tmove(e){
+				if(!drag){return;}
+				e.preventDefault();
+				var dx,dy;
+				if(e.changedTouches){
+					dx=e.changedTouches[0].offsetX-ox;
+					dy=e.changedTouches[0].offsetY-oy;
+					ox=e.changedTouches[0].offsetX;
+					oy=e.changedTouches[0].offsetY;
+				}else{
+					dx=e.offsetX-ox;
+					dy=e.offsetY-oy;
+					ox=e.offsetX;
+					oy=e.offsetY;
+				}
+				dlon = dx/canvas.width * (E-W);
+				dlat = dy/canvas.height * (N-S);
+				N+=dlat;
+				S+=dlat;
+				E-=dlon;
+				W-=dlon;
+				var ctx = canvas.getContext('2d');
+				ctx.fillStyle = "#000000";
+				ctx.fillRect(0,0,canvas.width,canvas.height);
+				drawStops();
+				for(var i in vehicles){
+					vehicles[i].draw();
+				}
+			}
+			function tend(e){
+				drag=false;
+			}
+
+			$(document).ready(function(){
+				canvas = $("#canvas")[0];
+				canvas.width=window.innerWidth*0.75;
+				canvas.height=canvas.width*9/16;
+				canvas.getContext('2d').fillStyle="#000000";
+				canvas.getContext('2d').fillRect(0,0,canvas.width,canvas.height);
+				initVehicleStatus();
+				populateStops(0);
+				setTimeout('mainLoop()',5000);
+			})
+		</script>
+	</head>
+	<body style='font-size:64pt;'>
+		<canvas  style='float:left;' onWheel='canvwheel(event)' id='canvas' width='800' height='600' ontouchstart="tstart(event)" ontouchend="tend(event)" ontouchmove="tmove(event)" ontouchcancel="tend(event)" onmousedown="tstart(event)" onmousemove="tmove(event)" onmouseup="tend(event)"></canvas>
+		<div style='float:left;'>
+			<a onclick='canvwheel({delta:1});'>-</>
+			<a onclick='canvwheel({delta:-1});'>+</>
+			<div id="status">Loading...</div>
+		</div>
+	</body>
+</html>
