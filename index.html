@@ -4,6 +4,7 @@
 		<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
 		<script>
 			var lineColors = {"Red":"#AA0000",
+							  "Mattapan":"#800000",
 							  "Blue":"#0000A0",
 							  "Green-A":"#00A000",
 							  "Green-B":"#00A000",
@@ -16,7 +17,18 @@
 							  "CR-Newburyport":"#A000A0",
 							  "CR-Rockport":"#A000A0",
 							  "CR-Wachusett":"#A000A0",
-							  "CR-Worcester":"#a00000"};
+							  "CR-Worcester":"#A000A0",
+							  "CR-Fairmount":"#A000A0",
+							  "CR-Fitchburg":"#A000A0",
+							  "CR-Franklin":"#A000A0",
+							  "CR-Greenbush":"#A000A0",
+							  "CR-Kingston":"#A000A0",
+							  "CR-Middleborough":"#A000A0",
+							  "CR-Needham":"#A000A0",
+							  "CR-Newburyport":"#A000A0",
+							  "CR-Providence":"#A000A0",
+							  "CR-Foxboro":"#A000A0"
+							};
 			var vehicles = [];
 			var stops = [];
 			var E=-70,W=-72,N=43,S=42;
@@ -73,13 +85,15 @@
 				$.get("https://api-v3.mbta.com/vehicles",function(data){
 					var info = data;
     				$("#status").html("Parsing");
-					canvas.getContext('2d').fillStyle="#00000008";
+					canvas.getContext('2d').fillStyle="#00000080";
 					canvas.getContext('2d').fillRect(0,0,canvas.width,canvas.height);
+					drawStops();
 					for(var i in vehicles){
 						vehicles[i].updateParams(info);
 						vehicles[i].draw();
 					}
 					$("#status").html("Done");
+					setTimeout('mainLoop()',5000);
 				});
 			}
 
@@ -108,9 +122,9 @@
 			}
 
 			function mainLoop(){
-				drawStops();
+				
 				updateVehicleStatus();
-				setTimeout('mainLoop()',5000);
+				
 			}
 
 			function canvwheel(e){
@@ -150,6 +164,7 @@
 			}
 			function drawStops(){
 				var ctx = canvas.getContext('2d');
+				var os={"line":"poo"};
 				for(var i in stops){
 					var stop = stops[i];
 					var x = canvas.width*(stop.lon-W)/(E-W);
@@ -160,6 +175,14 @@
 					ctx.arc(x,y,3,0,Math.PI*2,true);
 					ctx.fill();
 					ctx.stroke();
+					if(os.line==stop.line){
+						ctx.strokeStyle=ctx.fillStyle;
+						ctx.beginPath();
+						ctx.moveTo(x,y);
+						ctx.lineTo(canvas.width*(os.lon-W)/(E-W),canvas.height*(1-(os.lat-S)/(N-S)));
+						ctx.stroke();
+					}
+					os=stop;
 				}
 			}
 			var ox,oy,drag;
